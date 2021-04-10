@@ -21,11 +21,11 @@ def align_images(image: np.ndarray, template: np.ndarray,
     # match the features
     method = cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING
     matcher = cv2.DescriptorMatcher_create(method)
-    matches = matcher.match(descsA, descsB, None)
+    matches = matcher.match(descA, descB, None)
 
     # sort the matches by their distance (the smaller the 
     # distance, the "more similar" the features are)
-    matches = sorted(matces, key=lambda x: x.distance)
+    matches = sorted(matches, key=lambda x: x.distance)
 
     # keep only the top matches
     keep = int(len(matches) * keepPercent)

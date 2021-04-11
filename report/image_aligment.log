@@ -1,0 +1,3 @@
+[32m[I 210411 09:02:26 image_alignment:26][39m Original input image shape (3300, 2560)
+[32m[I 210411 09:02:26 image_alignment:27][39m Template image shape (2042, 1553)
+[32m[I 210411 09:02:26 image_alignment:28][39m Rescale input image shape to (1553, 2042)

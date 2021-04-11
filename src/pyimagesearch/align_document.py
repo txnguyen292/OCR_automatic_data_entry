@@ -36,13 +36,14 @@ if __name__ == "__main__":
     print("[INFO] aligning images...")
     aligned = align_images(image, template)
 
-    # img_name = Path(args["image"]).name
-    # path_to_save = Path(args["output"]) / img_name
-    # cv2.imwrite(str(path_to_save), aligned)
+    img_name = Path(args["image"]).name
+    print(str(img_name))
+    path_to_save = Path(args["output"]) / ("aligned"+img_name)
+    cv2.imwrite(str(path_to_save), aligned)
 
-    aligned = imutils.resize(aligned, width=700)
-    template = imutils.resize(template, width=700)
+    # aligned = imutils.resize(aligned, width=700)
+    # template = imutils.resize(template, width=700)
 
-    stacked = np.hstack([aligned, template])
-    cv2.imshow("Image Alignment Stacked", stacked)
-    cv2.waitKey(0)
+    # stacked = np.hstack([aligned, template])
+    # cv2.imshow("Image Alignment Stacked", stacked)
+    # cv2.waitKey(0)

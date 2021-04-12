@@ -1,6 +1,7 @@
 from __future__ import print_function
 import cv2
 import numpy as np
+import imutils
 
 MAX_FEATURES = 500
 GOOD_MATCH_PERCENT = 0.15
@@ -79,3 +80,8 @@ if __name__ == '__main__':
 
   # Print estimated homography
   print("Estimated homography : \n",  h)
+  imReference = imutils.resize(imReference, width=700)
+  align_img = imutils.resize(imReg, width=700)
+  stacked = np.hstack([align_img, imReference])
+  cv2.imshow("Comparison", stacked)
+  cv2.waitKey(0)

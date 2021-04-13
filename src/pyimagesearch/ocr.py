@@ -12,7 +12,10 @@ import pytesseract
 import argparse
 import imutils
 import cv2
+import re
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 from logzero import setup_logger
 import logging
 
@@ -64,18 +67,8 @@ def get_unique_files_code(file_path: Union[str, pathlib.WindowsPath]) -> Dict[in
 def test_get_unique_files_code():
     file_path = CONFIG.data / "annotations" / "final_project.csv"
     # id_to_file = get_unique_files_code(file_path)
-    res = {0: 'f1040--1988-page-001.jpg',
-            1: 'f1040--1988-page-002.jpg',
-            2: 'f2106--1988-page-001.jpg',
-            3: 'f2106--1988-page-002.jpg',
-            4: 'f2441--1988-page-001.jpg',
-            5: 'f1040sc--1988-page-001.jpg',
-            6: 'f4562--1988-page-001.jpg',
-            7: 'f4562--1988-page-002.jpg',
-            8: 'f6251--1988-page-001.jpg',
-            9: 'f1040sd--1988-page-001.jpg'
-            }
-    assert get_unique_files_code(file_path) == res, "Check your id to file_name scheme!"
+    assert get_unique_files_code(file_path) == id_to_filename, "Check your id to file_name scheme!"
+
 #--------------------------------------------------------------------------------------------
 # This is where classification comes in to output id
 # as inputs to get_img_from_id
@@ -102,45 +95,38 @@ def cleanup_text(text: str) -> str:
 # the input document which we wish to OCR
 
 OCRLocation = namedtuple("OCRLocation", ["id", "bbox", "filter_keywords"])
-# OCR_LOCATIONS = [
-#     OCRLocation("step1_name", (250,118,981,66), ["middle", "initial", "first", "name"]),
-#     OCRLocation("step1_address", (316,181,910,74), ["Present", "home", "address"]),
-#     OCRLocation("step1_city_state_zip", (316,249,913,71), ["city", "zip", "town", "state"]),
-#     OCRLocation("step4_SSN", (1221,121,321,66), ["social","security","number"]),
-#     OCRLocation("step5_total_income", (1275,1609,278,38), [""])
-# ]
 
-def ocr(img_name: str, img_reference: str, id: int, df: pd.DataFrame) -> List[str]:
-    """Perform ocr to get texts from images
+# def ocr(img_name: str, img_reference: str, id: int, df: pd.DataFrame) -> List[str]:
+#     """Perform ocr to get texts from images
 
-    Args:
-        img_name (str): img to perform ocr
-        img_reference (str): template image
-        id (int): type of form
+#     Args:
+#         img_name (str): img to perform ocr
+#         img_reference (str): template image
+#         id (int): type of form
 
-    Returns:
-        List[str]: OCR'd texts
-    """
-    # Read in image
-    image = cv2.imread(img_name)
-    ih, iw, ic = image.shape
-    template = cv2.imread(img_reference)
-    th, tw, tc = template.shape
-    # Rescale input image to be equal to template image
-    scaled_h, scaled_w = (ih / th), (iw / tw)
-    dim = (int(iw / scaled_w), int(ih / scaled_h))
-    scaled_image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
-    # aligning input image with template image
-    aligned, h = alignImages(image, template)
-    # initialize results as a list
-    parsingResults = []
-    # get form info
-    form = id_to_filename[id]
-    form_info = df.loc[df.image_name == form, ["box_name", "x", "y", "w", "h", "stop_words"]]
-    OCRLocations = []
-    for box_name, x, y, w, h, stop_word in form_info.values:
-        OCRLocations.append(OCRLocation(box_name, (x, y, w, h), stop_word))
-    return None
+#     Returns:
+#         List[str]: OCR'd texts
+#     """
+#     # Read in image
+#     image = cv2.imread(img_name)
+#     ih, iw, ic = image.shape
+#     template = cv2.imread(img_reference)
+#     th, tw, tc = template.shape
+#     # Rescale input image to be equal to template image
+#     scaled_h, scaled_w = (ih / th), (iw / tw)
+#     dim = (int(iw / scaled_w), int(ih / scaled_h))
+#     scaled_image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+#     # aligning input image with template image
+#     aligned, h = alignImages(image, template)
+#     # initialize results as a list
+#     parsingResults = []
+#     # get form info
+#     form = id_to_filename[id]
+#     form_info = df.loc[df.image_name == form, ["box_name", "x", "y", "w", "h", "stop_words"]]
+#     OCRLocations = []
+#     for box_name, x, y, w, h, stop_word in form_info.values:
+#         OCRLocations.append(OCRLocation(box_name, (x, y, w, h), stop_word))
+#     return None
 
 
 
@@ -224,28 +210,76 @@ def main():
             print("=" * len(loc["id"]))
             print(f"{text}\n\n")
 
+#======================================================================================================
+# namedtuple to store information
+OCRLocation: NamedTuple = namedtuple("OCRLocation", ["id", "bbox", "filter_keywords"])
 
-if __name__ == "__main__":
-    # main()
-    file_path = CONFIG.data / "annotations" / "final_project.csv"
-    id_to_file = get_unique_files_code(file_path)
-    ####
-    df = pd.read_csv(file_path, header=None)
-    columns = ["box_name", "x", "y", "w", "h", "image_name", "image_width", "image_height", "stop_words"]
-    df.columns = columns
-    # print(df)
-    form_info = df.loc[df.image_name == id_to_file[0], ["box_name", "x", "y", "w", "h", "stop_words"]]
+def ocr(img_name: str, img_reference: str, id: int, df: pd.DataFrame, debug=False) -> List[str]:
+    """Perform ocr to get texts from images
+
+    Args:
+        img_name (str): img to perform ocr
+        img_reference (str): template image
+        id (int): type of form
+
+    Returns:
+        List[str]: OCR'd texts
+    """
+    # Read in image
+    print("Load images...")
+    image = cv2.imread(img_name)
+    ih, iw, ic = image.shape
+    template = cv2.imread(img_reference)
+    th, tw, tc = template.shape
+    # Rescale input image to be equal to template image
+    scaled_h, scaled_w = (ih / th), (iw / tw)
+    dim = (int(iw / scaled_w), int(ih / scaled_h))
+    scaled_image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+    # aligning input image with template image
+    print("Perform alignment...")
+    aligned, h = alignImages(scaled_image, template)
+    # initialize results as a list
+    parsingResults = []
+    # get form info
+    form = id_to_filename[id]
+    # print(form)
+    # Need to replace condition with form later 
+    form_info = df.loc[df.image_name == "f1040--1988-1.png", ["box_name", "x", "y", "w", "h"]]
+    # print(form_info)
+    print("Get annotation information...")
     OCR_LOCATIONS = []
-    for box_name, x, y, w, h, stop_word in form_info.values:
-        OCR_LOCATIONS.append(OCRLocation(box_name, (x, y, w, h), stop_word))
-    for loc in OCR_LOCATIONS:
-        # extract the OCR ROI from the aligned image
+    for box_name, x, y, w, h in form_info.values: # Need to isnert stop words here later
+        OCR_LOCATIONS.append(OCRLocation(box_name, (x, y, w, h), None))
+    # regex pattern to remove non-words
+    word_pattern = re.compile(r"\w+")
+    # instruction words that are not relevant to our results
+    stop_words = "Your first name and initial(if joint return, also give spouse's name and initial), page 6 instructions Present Home Address social security number City Town"
+    stop_words = stop_words.lower().split()
+    # print(stop_words)
+    parsingResults = []
+    print("Performing OCR on input image...")
+    if debug:
+        fig = plt.figure(figsize=(12, 10))
+        rows = cols = np.ceil(np.sqrt(len(OCR_LOCATIONS)))
+    for idx, loc in enumerate(OCR_LOCATIONS):
         (x, y, w, h) = loc.bbox
         roi = aligned[y:y+h, x:x+w]
+        if debug:
+            plt.subplot(rows, cols, idx + 1)
+            plt.imshow(roi)
+        fig.suptitle("Peeking into what tesseract is looking at")
+        text = pytesseract.image_to_string(roi)
+        for line in text.split("\n"):
+            if len(line) == 0 or not word_pattern.match(line):
+                continue
+            lower = line.lower()
+            count = sum([line.count(x) for x in stop_words])
+            if count == 0:
+                parsingResults.append((loc, line))
+    return parsingResults
 
-        # OCR the ROI using Tesseract
-        rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
-        text = pytesseract.image_to_string(rgb)
-        print(text)
+
+if __name__ == "__main__":
+    main()
 
 
